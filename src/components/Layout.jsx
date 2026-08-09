@@ -1,12 +1,14 @@
 import { Outlet, NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useOrg } from '../context/OrgContext'
+import { useOnline } from '../lib/useOnline'
 
 // Shell básico do app. Nas próximas fases: celular = bottom nav operacional,
 // PC = sidebar de retaguarda. Aqui fica o topo comum + navegação mínima.
 export default function Layout() {
   const { sair, user } = useAuth()
   const { org } = useOrg()
+  const online = useOnline()
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -20,6 +22,15 @@ export default function Layout() {
         <strong style={{ flex: 1 }}>{org?.nome || 'KitGest'}</strong>
         <button className="secundario" onClick={sair} title={user?.email}>Sair</button>
       </header>
+
+      {!online && (
+        <div style={{
+          background: '#f97316', color: '#fff', padding: '8px 16px',
+          fontSize: '.85rem', textAlign: 'center'
+        }}>
+          📴 Sem conexão — você pode continuar; suas alterações são enviadas ao servidor assim que a internet voltar.
+        </div>
+      )}
 
       <nav style={{ display: 'flex', gap: 12, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--borda)' }}>
         <NavLink to="/" end style={navStyle}>Início</NavLink>
