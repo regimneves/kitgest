@@ -1,0 +1,21 @@
+# KitGest — deploy estático (Vite) + SPA fallback + PWA
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Todas as rotas do react-router caem no index.html (SPA).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# O service worker não pode ser cacheado agressivamente (auto-update).
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "no-cache"
