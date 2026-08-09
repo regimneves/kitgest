@@ -32,6 +32,9 @@ export default function Home() {
         <Link to="/recebimentos" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
           <strong>Recebimentos</strong><p className="sub">aluguel · recibo · PIX →</p>
         </Link>
+        <Link to="/cobranca" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <strong>Cobrança</strong><p className="sub">quem deve · WhatsApp →</p>
+        </Link>
         <Link to="/vistorias" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
           <strong>Vistoria</strong><p className="sub">checklist · foto · laudo →</p>
         </Link>

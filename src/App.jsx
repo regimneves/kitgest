@@ -16,6 +16,7 @@ import Acertos from './pages/Acertos'
 import Manutencao from './pages/Manutencao'
 import Composicao from './pages/Composicao'
 import Relatorios from './pages/Relatorios'
+import Cobranca from './pages/Cobranca'
 import Layout from './components/Layout'
 
 function Splash({ texto = 'Carregando…' }) {
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="/acertos" element={<Acertos />} />
         <Route path="/manutencao" element={<Manutencao />} />
         <Route path="/relatorios" element={<Relatorios />} />
+        <Route path="/cobranca" element={<Cobranca />} />
         <Route path="/config" element={<Config />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
