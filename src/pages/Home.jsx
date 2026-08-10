@@ -35,6 +35,21 @@ export default function Home() {
         <Link to="/cobranca" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
           <strong>Cobrança</strong><p className="sub">quem deve · WhatsApp →</p>
         </Link>
+        <Link to="/avisos" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <strong>Avisos de vencimento</strong><p className="sub">lembrete 7 · 2 · 0 dias →</p>
+        </Link>
+        <Link to="/contas-pagar" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <strong>Contas a pagar</strong><p className="sub">aluguel-mãe · despesas →</p>
+        </Link>
+        <Link to="/fluxo-caixa" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <strong>Fluxo de caixa</strong><p className="sub">entradas − saídas = lucro →</p>
+        </Link>
+        <Link to="/alertas" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <strong>Alertas</strong><p className="sub">o que precisa de atenção →</p>
+        </Link>
+        <Link to="/reajustes" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <strong>Reajustes</strong><p className="sub">reajustar · renovar contrato →</p>
+        </Link>
         <Link to="/vistorias" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
           <strong>Vistoria</strong><p className="sub">checklist · foto · laudo →</p>
         </Link>

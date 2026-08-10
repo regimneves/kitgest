@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useOrg } from '../context/OrgContext'
+import { lerConfig, TEMPLATE_PADRAO } from '../lib/gestao'
 
-// Configuração da operação: branding (nome, cor, logo) + PIX.
+// Configuração da operação: branding (nome, cor, logo) + PIX + gestão (avisos/alertas).
 // Grava na tabela orgs; logo vai pro bucket `logos/<org_id>/logo.<ext>`.
 export default function Config() {
   const { org, recarregar } = useOrg()
+  const cfg = lerConfig(org)
   const [form, setForm] = useState({
     nome: org.nome || '',
     cor_primaria: org.cor_primaria || '#1e293b',
@@ -15,17 +17,46 @@ export default function Config() {
     pix_nome_recebedor: org.pix_nome_recebedor || '',
     pix_cidade: org.pix_cidade || ''
   })
+  // Gestão: avisos de vencimento + limiares dos alertas.
+  const [gestao, setGestao] = useState({
+    avisos_ativo: cfg.avisos.ativo !== false,
+    avisos_dias: (cfg.avisos.dias || [7, 2, 0]).join(', '),
+    avisos_template: cfg.avisos.template || '',
+    alerta_contrato: cfg.alertas.contrato_vencendo_dias,
+    alerta_vaga: cfg.alertas.vaga_dias,
+    alerta_manut: cfg.alertas.manutencao_parada_dias
+  })
   const [logoBusy, setLogoBusy] = useState(false)
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
   const [busy, setBusy] = useState(false)
 
   const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
+  const setG = (k) => (e) => setGestao(g => ({ ...g, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+
+  function montarGestaoConfig() {
+    const dias = [...new Set(
+      String(gestao.avisos_dias).split(/[\s,]+/).map(s => parseInt(s, 10)).filter(n => Number.isFinite(n) && n >= 0)
+    )].sort((a, b) => b - a)
+    return {
+      avisos: {
+        ativo: !!gestao.avisos_ativo,
+        dias: dias.length ? dias : [7, 2, 0],
+        ...(gestao.avisos_template?.trim() ? { template: gestao.avisos_template.trim() } : {})
+      },
+      alertas: {
+        contrato_vencendo_dias: Math.max(1, parseInt(gestao.alerta_contrato, 10) || 30),
+        vaga_dias: Math.max(1, parseInt(gestao.alerta_vaga, 10) || 15),
+        manutencao_parada_dias: Math.max(1, parseInt(gestao.alerta_manut, 10) || 7)
+      }
+    }
+  }
 
   async function salvar(e) {
     e.preventDefault()
     setErro(''); setOk(''); setBusy(true)
-    const { error } = await supabase.from('orgs').update(form).eq('id', org.id)
+    const { error } = await supabase.from('orgs')
+      .update({ ...form, gestao_config: montarGestaoConfig() }).eq('id', org.id)
     if (error) setErro(error.message)
     else { setOk('Configuração salva.'); await recarregar() }
     setBusy(false)
@@ -111,6 +142,46 @@ export default function Config() {
 
         <label htmlFor="pixcidade">Cidade do recebedor</label>
         <input id="pixcidade" value={form.pix_cidade} onChange={set('pix_cidade')} maxLength={15} />
+      </div>
+
+      <div className="card mt">
+        <strong>Avisos de vencimento</strong>
+        <p className="sub" style={{ marginTop: 4 }}>Lembretes enviados ao inquilino antes do vencimento do aluguel (tela “Avisos”).</p>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="checkbox" style={{ width: 'auto' }} checked={gestao.avisos_ativo} onChange={setG('avisos_ativo')} />
+          Ativar avisos de vencimento
+        </label>
+
+        <label htmlFor="dias">Marcos (dias antes do vencimento)</label>
+        <input id="dias" value={gestao.avisos_dias} onChange={setG('avisos_dias')} placeholder="7, 2, 0" />
+        <p className="sub" style={{ marginTop: 4 }}>Use <b>0</b> para o dia do vencimento. Ex.: <b>7, 2, 0</b> avisa 7 dias antes, 2 dias antes e no dia.</p>
+
+        <label htmlFor="tpl">Mensagem (opcional)</label>
+        <textarea id="tpl" rows={4} value={gestao.avisos_template} onChange={setG('avisos_template')}
+                  placeholder={TEMPLATE_PADRAO} />
+        <p className="sub" style={{ marginTop: 4 }}>
+          Deixe em branco para usar o texto padrão. Campos: {'{nome} {quarto} {valor} {vencimento} {quando} {competencia} {pix}'}
+        </p>
+      </div>
+
+      <div className="card mt">
+        <strong>Alertas de gestão</strong>
+        <p className="sub" style={{ marginTop: 4 }}>Quando destacar cada situação na tela “Alertas”.</p>
+        <div className="linha">
+          <div>
+            <label htmlFor="ac">Contrato vencendo (dias)</label>
+            <input id="ac" inputMode="numeric" value={gestao.alerta_contrato} onChange={setG('alerta_contrato')} />
+          </div>
+          <div>
+            <label htmlFor="av">Quarto vago (dias)</label>
+            <input id="av" inputMode="numeric" value={gestao.alerta_vaga} onChange={setG('alerta_vaga')} />
+          </div>
+          <div>
+            <label htmlFor="am">Manutenção parada (dias)</label>
+            <input id="am" inputMode="numeric" value={gestao.alerta_manut} onChange={setG('alerta_manut')} />
+          </div>
+        </div>
       </div>
 
       {erro && <div className="erro">{erro}</div>}

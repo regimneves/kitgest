@@ -17,6 +17,11 @@ import Manutencao from './pages/Manutencao'
 import Composicao from './pages/Composicao'
 import Relatorios from './pages/Relatorios'
 import Cobranca from './pages/Cobranca'
+import ContasPagar from './pages/ContasPagar'
+import FluxoCaixa from './pages/FluxoCaixa'
+import Alertas from './pages/Alertas'
+import Reajustes from './pages/Reajustes'
+import Avisos from './pages/Avisos'
 import Layout from './components/Layout'
 
 function Splash({ texto = 'Carregando…' }) {
@@ -67,6 +72,11 @@ export default function App() {
         <Route path="/manutencao" element={<Manutencao />} />
         <Route path="/relatorios" element={<Relatorios />} />
         <Route path="/cobranca" element={<Cobranca />} />
+        <Route path="/contas-pagar" element={<ContasPagar />} />
+        <Route path="/fluxo-caixa" element={<FluxoCaixa />} />
+        <Route path="/alertas" element={<Alertas />} />
+        <Route path="/reajustes" element={<Reajustes />} />
+        <Route path="/avisos" element={<Avisos />} />
         <Route path="/config" element={<Config />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

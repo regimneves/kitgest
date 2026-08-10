@@ -39,6 +39,11 @@ export default function Layout() {
         <NavLink to="/contratos" style={navStyle}>Contratos</NavLink>
         <NavLink to="/recebimentos" style={navStyle}>Receber</NavLink>
         <NavLink to="/cobranca" style={navStyle}>Cobrança</NavLink>
+        <NavLink to="/avisos" style={navStyle}>Avisos</NavLink>
+        <NavLink to="/contas-pagar" style={navStyle}>Contas a pagar</NavLink>
+        <NavLink to="/fluxo-caixa" style={navStyle}>Fluxo de caixa</NavLink>
+        <NavLink to="/alertas" style={navStyle}>Alertas</NavLink>
+        <NavLink to="/reajustes" style={navStyle}>Reajustes</NavLink>
         <NavLink to="/vistorias" style={navStyle}>Vistoria</NavLink>
         <NavLink to="/acertos" style={navStyle}>Acerto</NavLink>
         <NavLink to="/manutencao" style={navStyle}>Manutenção</NavLink>
