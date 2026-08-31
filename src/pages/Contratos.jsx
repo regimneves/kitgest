@@ -30,6 +30,7 @@ export default function Contratos() {
   const [editando, setEditando] = useState(null)
   const [filtro, setFiltro] = useState('vigentes') // vigentes | todos
   const [erro, setErro] = useState('')
+  const [novoInq, setNovoInq] = useState(null) // cadastro rápido de inquilino inline
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -58,9 +59,9 @@ export default function Contratos() {
     return m
   }, [contratos])
 
-  function abrirNovo() { setErro(''); setEditando({ ...vazio }) }
+  function abrirNovo() { setErro(''); setNovoInq(null); setEditando({ ...vazio }) }
   function abrirEdicao(c) {
-    setErro('')
+    setErro(''); setNovoInq(null)
     setEditando({
       ...vazio, ...c,
       dia_vencimento: c.dia_vencimento ?? '',
@@ -72,6 +73,20 @@ export default function Contratos() {
       data_inicio: c.data_inicio ?? '',
       data_fim: c.data_fim ?? ''
     })
+  }
+
+  // Cadastro rápido de inquilino direto no contrato: cria e já seleciona.
+  async function adicionarInquilino() {
+    const nome = (novoInq?.nome || '').trim()
+    if (!nome) { setErro('Informe o nome do inquilino.'); return }
+    setErro('')
+    const { data, error } = await supabase.from('inquilinos')
+      .insert({ org_id: org.id, nome, telefone: novoInq.telefone?.trim() || null })
+      .select('id, nome').single()
+    if (error) { setErro(error.message); return }
+    setInquilinos(prev => [...prev, data].sort((a, b) => a.nome.localeCompare(b.nome)))
+    setEditando(ed => ({ ...ed, inquilino_id: data.id }))
+    setNovoInq(null)
   }
 
   // Ao escolher o quarto num contrato NOVO, sugere o valor final do quarto.
@@ -149,7 +164,6 @@ export default function Contratos() {
     ? contratos.filter(c => VIGENTE.has(c.status))
     : contratos
 
-  const semInquilinos = inquilinos.length === 0
   const semQuartos = quartos.length === 0
 
   return (
@@ -159,15 +173,14 @@ export default function Contratos() {
           <h1>Contratos</h1>
           <p className="sub" style={{ margin: 0 }}>Vínculo inquilino × quarto, com valor, vencimento e caução.</p>
         </div>
-        <button className="ouro" onClick={abrirNovo} disabled={semInquilinos || semQuartos}>+ Novo contrato</button>
+        <button className="ouro" onClick={abrirNovo} disabled={semQuartos}>+ Novo contrato</button>
       </div>
 
-      {(semInquilinos || semQuartos) && (
+      {semQuartos && (
         <div className="card mt" style={{ borderColor: 'var(--cor-ouro)' }}>
           <strong>Antes de criar um contrato</strong>
           <p className="sub" style={{ marginBottom: 0 }}>
-            {semInquilinos && <>Cadastre ao menos um <b>inquilino</b>. </>}
-            {semQuartos && <>Cadastre ao menos um <b>quarto</b> (em Casas).</>}
+            Cadastre ao menos um <b>quarto</b> (em Casas). O <b>inquilino</b> você pode cadastrar aqui mesmo, na hora.
           </p>
         </div>
       )}
@@ -227,11 +240,32 @@ export default function Contratos() {
         <Modal titulo={editando.id ? 'Editar contrato' : 'Novo contrato'} onFechar={() => setEditando(null)}>
           <form onSubmit={salvar}>
             <label>Inquilino *</label>
-            <select value={editando.inquilino_id}
-                    onChange={e => setEditando({ ...editando, inquilino_id: e.target.value })}>
-              <option value="">— escolher —</option>
-              {inquilinos.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
-            </select>
+            {novoInq ? (
+              <div className="card" style={{ padding: 12, borderColor: 'var(--cor-ouro)' }}>
+                <label>Nome do novo inquilino *</label>
+                <input value={novoInq.nome} autoFocus placeholder="Nome completo"
+                       onChange={e => setNovoInq({ ...novoInq, nome: e.target.value })}
+                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarInquilino() } }} />
+                <label>Telefone / WhatsApp</label>
+                <input value={novoInq.telefone} inputMode="tel" placeholder="(11) 90000-0000"
+                       onChange={e => setNovoInq({ ...novoInq, telefone: e.target.value })}
+                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarInquilino() } }} />
+                <div className="linha mt">
+                  <button type="button" className="secundario" onClick={() => setNovoInq(null)}>Cancelar</button>
+                  <button type="button" className="ouro" onClick={adicionarInquilino}>Adicionar e usar</button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select style={{ flex: 1 }} value={editando.inquilino_id}
+                        onChange={e => setEditando({ ...editando, inquilino_id: e.target.value })}>
+                  <option value="">— escolher —</option>
+                  {inquilinos.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
+                </select>
+                <button type="button" className="secundario" title="Cadastrar novo inquilino aqui"
+                        onClick={() => { setErro(''); setNovoInq({ nome: '', telefone: '' }) }}>+ novo</button>
+              </div>
+            )}
 
             <label>Quarto *</label>
             <select value={editando.quarto_id}
