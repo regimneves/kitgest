@@ -1,8 +1,12 @@
 name: Keep Supabase awake
 
 # Projetos Supabase no plano free pausam após ~7 dias sem atividade.
-# Este workflow faz uma chamada leve ao banco 2x por semana (seg e qui),
-# garantindo intervalo < 7 dias entre pings — o KitGest nunca dorme.
+# Este workflow bate no banco 2x por semana (seg e qui) para gerar tráfego
+# e manter o intervalo < 7 dias — o KitGest nunca dorme.
+#
+# Um projeto PAUSADO não estabelece conexão (curl devolve código 000).
+# Um projeto ATIVO responde algum HTTP (200 com sessão, 401 sem — ambos provam
+# que o servidor está de pé). Por isso: 000 = alerta; qualquer outro = ok.
 
 on:
   schedule:
@@ -13,16 +17,16 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping REST do Supabase (KitGest)
+      - name: Ping Supabase (KitGest)
         run: |
           URL="https://geltxfbwrqmacshwaveh.supabase.co"
           KEY="sb_publishable_MnG02iBufzW0rQ9taraJ1A_jdIvP_US"
-          code=$(curl -s -o /dev/null -w "%{http_code}" \
+          code=$(curl -s -o /dev/null --max-time 30 -w "%{http_code}" \
             "$URL/rest/v1/orgs?select=id&limit=1" \
-            -H "apikey: $KEY")
-          echo "HTTP $code"
-          # 200 (com RLS retorna lista vazia) confirma que o banco respondeu = atividade
-          if [ "$code" != "200" ]; then
-            echo "Banco não respondeu 200 — pode estar pausado. Verifique."
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          echo "Resposta do banco: HTTP $code"
+          if [ "$code" = "000" ]; then
+            echo "::error::Sem conexão com o Supabase — projeto pode estar PAUSADO. Reative no dashboard."
             exit 1
           fi
+          echo "Banco acordado (respondeu HTTP $code) — atividade registrada."
