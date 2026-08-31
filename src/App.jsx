@@ -22,6 +22,8 @@ import FluxoCaixa from './pages/FluxoCaixa'
 import Alertas from './pages/Alertas'
 import Reajustes from './pages/Reajustes'
 import Avisos from './pages/Avisos'
+import Bloqueio from './pages/Bloqueio'
+import Admin from './pages/Admin'
 import Layout from './components/Layout'
 
 function Splash({ texto = 'Carregando…' }) {
@@ -30,7 +32,7 @@ function Splash({ texto = 'Carregando…' }) {
 
 export default function App() {
   const { session, carregando: authLoad } = useAuth()
-  const { org, carregando: orgLoad } = useOrg()
+  const { org, carregando: orgLoad, bloqueado, ehAdmin } = useOrg()
 
   if (authLoad) return <Splash />
   if (!session) {
@@ -55,10 +57,21 @@ export default function App() {
     )
   }
 
+  // Logado com org mas acesso BLOQUEADO (vencido/suspenso) → tela de bloqueio.
+  // O admin da plataforma nunca é bloqueado.
+  if (bloqueado && !ehAdmin) {
+    return (
+      <Routes>
+        <Route path="*" element={<Bloqueio />} />
+      </Routes>
+    )
+  }
+
   // Logado com org → app
   return (
     <Routes>
       <Route element={<Layout />}>
+        <Route path="/admin" element={<Admin />} />
         <Route path="/" element={<Home />} />
         <Route path="/casas" element={<Casas />} />
         <Route path="/casas/:casaId/quartos" element={<Quartos />} />

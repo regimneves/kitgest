@@ -4,14 +4,31 @@ import { useAuth } from './AuthContext'
 
 const OrgContext = createContext(null)
 
+// Calcula a situação de acesso a partir da org.
+function calcAcesso(org) {
+  if (!org) return { bloqueado: false, diasRestantes: null, motivo: null }
+  if (org.situacao === 'suspensa') {
+    return { bloqueado: true, diasRestantes: null, motivo: 'suspensa' }
+  }
+  if (org.acesso_expira_em) {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+    const venc = new Date(org.acesso_expira_em + 'T00:00:00')
+    const dias = Math.round((venc - hoje) / 86400000)
+    if (dias < 0) return { bloqueado: true, diasRestantes: dias, motivo: 'vencido' }
+    return { bloqueado: false, diasRestantes: dias, motivo: null }
+  }
+  return { bloqueado: false, diasRestantes: null, motivo: null }
+}
+
 export function OrgProvider({ children }) {
   const { user } = useAuth()
   const [org, setOrg] = useState(null)
+  const [ehAdmin, setEhAdmin] = useState(false)
   const [carregando, setCarregando] = useState(true)
 
   // Carrega a org do usuário logado (via vínculo em org_membros).
   const recarregar = useCallback(async () => {
-    if (!user) { setOrg(null); setCarregando(false); return }
+    if (!user) { setOrg(null); setEhAdmin(false); setCarregando(false); return }
     setCarregando(true)
     const { data: vinc } = await supabase
       .from('org_membros')
@@ -28,6 +45,11 @@ export function OrgProvider({ children }) {
       .maybeSingle()
 
     setOrg(o ?? null)
+
+    // É administrador da plataforma? (checagem real no servidor)
+    const { data: adm } = await supabase.rpc('is_admin')
+    setEhAdmin(adm === true)
+
     setCarregando(false)
   }, [user])
 
@@ -48,8 +70,10 @@ export function OrgProvider({ children }) {
     return data
   }
 
+  const acesso = calcAcesso(org)
+
   return (
-    <OrgContext.Provider value={{ org, carregando, recarregar, criarOrg }}>
+    <OrgContext.Provider value={{ org, carregando, recarregar, criarOrg, ehAdmin, ...acesso }}>
       {children}
     </OrgContext.Provider>
   )

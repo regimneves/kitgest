@@ -7,8 +7,16 @@ import { useOnline } from '../lib/useOnline'
 // PC = sidebar de retaguarda. Aqui fica o topo comum + navegação mínima.
 export default function Layout() {
   const { sair, user } = useAuth()
-  const { org } = useOrg()
+  const { org, diasRestantes, ehAdmin } = useOrg()
   const online = useOnline()
+
+  const emTrial = org?.situacao === 'trial'
+  const avisarVenc = diasRestantes != null && diasRestantes <= 7
+  const avisoAcesso = (emTrial || avisarVenc) && diasRestantes != null
+    ? (emTrial
+        ? `⏳ Teste grátis: ${diasRestantes === 0 ? 'último dia' : `${diasRestantes} dia(s) restante(s)`}.`
+        : `⚠️ Seu acesso vence em ${diasRestantes === 0 ? 'hoje' : `${diasRestantes} dia(s)`} — fale com o suporte para renovar.`)
+    : null
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -32,6 +40,16 @@ export default function Layout() {
         </div>
       )}
 
+      {avisoAcesso && (
+        <div style={{
+          background: emTrial ? '#fbf3dd' : '#fef3c7',
+          color: '#7a5b00', padding: '8px 16px',
+          fontSize: '.85rem', textAlign: 'center', borderBottom: '1px solid var(--borda)'
+        }}>
+          {avisoAcesso}
+        </div>
+      )}
+
       <nav style={{ display: 'flex', gap: 12, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--borda)' }}>
         <NavLink to="/" end style={navStyle}>Início</NavLink>
         <NavLink to="/casas" style={navStyle}>Casas</NavLink>
@@ -49,6 +67,7 @@ export default function Layout() {
         <NavLink to="/manutencao" style={navStyle}>Manutenção</NavLink>
         <NavLink to="/relatorios" style={navStyle}>Relatórios</NavLink>
         <NavLink to="/config" style={navStyle}>Configuração</NavLink>
+        {ehAdmin && <NavLink to="/admin" style={navStyle}>🛠️ Admin</NavLink>}
       </nav>
 
       <main style={{ flex: 1, padding: 16 }}>
