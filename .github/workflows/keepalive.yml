@@ -1,0 +1,28 @@
+name: Keep Supabase awake
+
+# Projetos Supabase no plano free pausam após ~7 dias sem atividade.
+# Este workflow faz uma chamada leve ao banco 2x por semana (seg e qui),
+# garantindo intervalo < 7 dias entre pings — o KitGest nunca dorme.
+
+on:
+  schedule:
+    - cron: "0 9 * * 1,4"   # 09:00 UTC toda segunda e quinta
+  workflow_dispatch:          # permite rodar manualmente pelo botão do Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping REST do Supabase (KitGest)
+        run: |
+          URL="https://geltxfbwrqmacshwaveh.supabase.co"
+          KEY="sb_publishable_MnG02iBufzW0rQ9taraJ1A_jdIvP_US"
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            "$URL/rest/v1/orgs?select=id&limit=1" \
+            -H "apikey: $KEY")
+          echo "HTTP $code"
+          # 200 (com RLS retorna lista vazia) confirma que o banco respondeu = atividade
+          if [ "$code" != "200" ]; then
+            echo "Banco não respondeu 200 — pode estar pausado. Verifique."
+            exit 1
+          fi
