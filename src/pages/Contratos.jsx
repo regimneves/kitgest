@@ -4,10 +4,6 @@ import { useOrg } from '../context/OrgContext'
 import { formatarMoeda, parseMoeda } from '../lib/format'
 import Modal from '../components/Modal'
 
-// Normalização para comparar cadastros e evitar duplicidade.
-const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
-const soDigitos = s => String(s || '').replace(/\D/g, '')
-
 const STATUS = {
   ativo:        { label: 'Ativo',        cor: '#22c55e' },
   pendente:     { label: 'Pendente',     cor: '#eab308' },
@@ -30,29 +26,25 @@ export default function Contratos() {
   const [contratos, setContratos] = useState([])
   const [inquilinos, setInquilinos] = useState([])
   const [quartos, setQuartos] = useState([]) // com casas(nome)
-  const [casas, setCasas] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [editando, setEditando] = useState(null)
   const [filtro, setFiltro] = useState('vigentes') // vigentes | todos
   const [erro, setErro] = useState('')
   const [novoInq, setNovoInq] = useState(null) // cadastro rápido de inquilino inline
-  const [novoQ, setNovoQ] = useState(null)     // cadastro rápido de quarto inline
 
   const carregar = useCallback(async () => {
     setCarregando(true)
-    const [{ data: cs, error }, { data: is }, { data: qs }, { data: hs }] = await Promise.all([
+    const [{ data: cs, error }, { data: is }, { data: qs }] = await Promise.all([
       supabase.from('contratos')
         .select('*, inquilinos(nome, telefone), quartos(identificacao, casas(nome))')
         .order('criado_em', { ascending: false }),
-      supabase.from('inquilinos').select('id, nome, cpf').order('nome'),
-      supabase.from('quartos').select('id, identificacao, valor_final, casa_id, casas(nome)').order('identificacao'),
-      supabase.from('casas').select('id, nome').order('nome')
+      supabase.from('inquilinos').select('id, nome').order('nome'),
+      supabase.from('quartos').select('id, identificacao, valor_final, casa_id, casas(nome)').order('identificacao')
     ])
     if (error) setErro(error.message)
     setContratos(cs || [])
     setInquilinos(is || [])
     setQuartos(qs || [])
-    setCasas(hs || [])
     setCarregando(false)
   }, [])
 
@@ -67,18 +59,9 @@ export default function Contratos() {
     return m
   }, [contratos])
 
-  // Quartos que JÁ têm 2+ contratos vigentes (duplicidade a resolver).
-  const quartosDuplicados = useMemo(() => {
-    const cnt = {}
-    for (const c of contratos) {
-      if (VIGENTE.has(c.status)) cnt[c.quarto_id] = (cnt[c.quarto_id] || 0) + 1
-    }
-    return new Set(Object.keys(cnt).filter(k => cnt[k] > 1))
-  }, [contratos])
-
-  function abrirNovo() { setErro(''); setNovoInq(null); setNovoQ(null); setEditando({ ...vazio }) }
+  function abrirNovo() { setErro(''); setNovoInq(null); setEditando({ ...vazio }) }
   function abrirEdicao(c) {
-    setErro(''); setNovoInq(null); setNovoQ(null)
+    setErro(''); setNovoInq(null)
     setEditando({
       ...vazio, ...c,
       dia_vencimento: c.dia_vencimento ?? '',
@@ -97,66 +80,13 @@ export default function Contratos() {
     const nome = (novoInq?.nome || '').trim()
     if (!nome) { setErro('Informe o nome do inquilino.'); return }
     setErro('')
-
-    // Evita duplicidade: se já existe alguém com o mesmo nome (ou CPF), avisa e deixa decidir.
-    const cpf = soDigitos(novoInq.cpf)
-    const existente = inquilinos.find(i =>
-      norm(i.nome) === norm(nome) || (cpf && cpf.length >= 11 && soDigitos(i.cpf) === cpf))
-    if (existente) {
-      const usarExistente = window.confirm(
-        `Já existe um inquilino cadastrado como "${existente.nome}".\n\n` +
-        `OK = usar o já cadastrado (recomendado)\n` +
-        `Cancelar = cadastrar assim mesmo (vai duplicar)`)
-      if (usarExistente) {
-        setEditando(ed => ({ ...ed, inquilino_id: existente.id }))
-        setNovoInq(null)
-        return
-      }
-    }
-
     const { data, error } = await supabase.from('inquilinos')
-      .insert({ org_id: org.id, nome, telefone: novoInq.telefone?.trim() || null, cpf: cpf || null })
-      .select('id, nome, cpf').single()
+      .insert({ org_id: org.id, nome, telefone: novoInq.telefone?.trim() || null })
+      .select('id, nome').single()
     if (error) { setErro(error.message); return }
     setInquilinos(prev => [...prev, data].sort((a, b) => a.nome.localeCompare(b.nome)))
     setEditando(ed => ({ ...ed, inquilino_id: data.id }))
     setNovoInq(null)
-  }
-
-  // Cadastro rápido de quarto direto no contrato: cria e já seleciona.
-  async function adicionarQuarto() {
-    const ident = (novoQ?.identificacao || '').trim()
-    if (!novoQ?.casa_id) { setErro('Escolha a casa do quarto.'); return }
-    if (!ident) { setErro('Informe a identificação do quarto.'); return }
-    setErro('')
-
-    // Evita duplicidade: mesmo quarto na mesma casa.
-    const existente = quartos.find(q => q.casa_id === novoQ.casa_id && norm(q.identificacao) === norm(ident))
-    if (existente) {
-      const usarExistente = window.confirm(
-        `Já existe um quarto "${existente.identificacao}" nessa casa.\n\n` +
-        `OK = usar o já cadastrado (recomendado)\n` +
-        `Cancelar = cadastrar assim mesmo (vai duplicar)`)
-      if (usarExistente) {
-        escolherQuarto(existente.id)
-        setNovoQ(null)
-        return
-      }
-    }
-
-    const valor = parseMoeda(novoQ.valor_final)
-    const { data, error } = await supabase.from('quartos')
-      .insert({ org_id: org.id, casa_id: novoQ.casa_id, identificacao: ident,
-                aluguel_base: valor, valor_final: valor, status: 'vago' })
-      .select('id, identificacao, valor_final, casa_id, casas(nome)').single()
-    if (error) { setErro(error.message); return }
-    setQuartos(prev => [...prev, data].sort((a, b) => (a.identificacao || '').localeCompare(b.identificacao || '')))
-    setEditando(ed => ({
-      ...ed,
-      quarto_id: data.id,
-      valor_aluguel: (ed.valor_aluguel === '' || ed.valor_aluguel == null) ? data.valor_final : ed.valor_aluguel
-    }))
-    setNovoQ(null)
   }
 
   // Ao escolher o quarto num contrato NOVO, sugere o valor final do quarto.
@@ -176,29 +106,11 @@ export default function Contratos() {
     if (!editando.inquilino_id) { setErro('Escolha o inquilino.'); return }
     if (!editando.quarto_id) { setErro('Escolha o quarto.'); return }
 
-    // aviso: quarto já ocupado por OUTRO contrato vigente (deixa decidir)
+    // trava: quarto já ocupado por OUTRO contrato vigente
     const donoAtual = quartoOcupadoPor[editando.quarto_id]
     if (VIGENTE.has(editando.status) && donoAtual && donoAtual !== editando.id) {
-      const ok = window.confirm(
-        'Este quarto já tem um contrato vigente. Manter dois contratos ativos no mesmo quarto ' +
-        'bagunça a ocupação e o rent roll.\n\n' +
-        'OK = criar assim mesmo\nCancelar = voltar (o ideal é encerrar o outro antes)')
-      if (!ok) return
-    }
-
-    // aviso: inquilino já tem contrato vigente em outro quarto (só ao criar)
-    if (VIGENTE.has(editando.status) && !editando.id) {
-      const outro = contratos.find(c =>
-        c.inquilino_id === editando.inquilino_id && VIGENTE.has(c.status) && c.quarto_id !== editando.quarto_id)
-      if (outro) {
-        const nomeQ = outro.quartos
-          ? `${outro.quartos.casas?.nome ? outro.quartos.casas.nome + ' · ' : ''}${outro.quartos.identificacao}`
-          : 'outro quarto'
-        const ok = window.confirm(
-          `Este inquilino já tem contrato vigente em ${nomeQ}.\n\n` +
-          `OK = criar outro contrato para ele\nCancelar = voltar`)
-        if (!ok) return
-      }
+      setErro('Este quarto já tem um contrato vigente. Encerre-o antes de criar outro.')
+      return
     }
 
     const dia = editando.dia_vencimento === '' ? null : Number(editando.dia_vencimento)
@@ -252,7 +164,7 @@ export default function Contratos() {
     ? contratos.filter(c => VIGENTE.has(c.status))
     : contratos
 
-  const semCasas = casas.length === 0
+  const semQuartos = quartos.length === 0
 
   return (
     <div style={{ maxWidth: 820, margin: '0 auto' }}>
@@ -261,14 +173,14 @@ export default function Contratos() {
           <h1>Contratos</h1>
           <p className="sub" style={{ margin: 0 }}>Vínculo inquilino × quarto, com valor, vencimento e caução.</p>
         </div>
-        <button className="ouro" onClick={abrirNovo} disabled={semCasas}>+ Novo contrato</button>
+        <button className="ouro" onClick={abrirNovo} disabled={semQuartos}>+ Novo contrato</button>
       </div>
 
-      {semCasas && (
+      {semQuartos && (
         <div className="card mt" style={{ borderColor: 'var(--cor-ouro)' }}>
           <strong>Antes de criar um contrato</strong>
           <p className="sub" style={{ marginBottom: 0 }}>
-            Cadastre ao menos uma <b>casa</b> (em Casas). O <b>quarto</b> e o <b>inquilino</b> você pode cadastrar aqui mesmo, na hora.
+            Cadastre ao menos um <b>quarto</b> (em Casas). O <b>inquilino</b> você pode cadastrar aqui mesmo, na hora.
           </p>
         </div>
       )}
@@ -304,12 +216,6 @@ export default function Contratos() {
                     <span className="tag" style={{ background: s.cor + '22', color: s.cor, border: `1px solid ${s.cor}55` }}>
                       {s.label}
                     </span>
-                    {VIGENTE.has(c.status) && quartosDuplicados.has(c.quarto_id) && (
-                      <span className="tag" title="Este quarto tem mais de um contrato vigente — encerre os extras"
-                            style={{ background: '#ef444422', color: '#ef4444', border: '1px solid #ef444455' }}>
-                        ⚠ quarto duplicado
-                      </span>
-                    )}
                   </div>
                   <div className="sub" style={{ margin: '4px 0 0' }}>
                     {quartoTxt} · {formatarMoeda(c.valor_aluguel)}/mês
@@ -340,20 +246,10 @@ export default function Contratos() {
                 <input value={novoInq.nome} autoFocus placeholder="Nome completo"
                        onChange={e => setNovoInq({ ...novoInq, nome: e.target.value })}
                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarInquilino() } }} />
-                <div className="linha">
-                  <div>
-                    <label>CPF</label>
-                    <input value={novoInq.cpf} placeholder="opcional (ajuda a não duplicar)"
-                           onChange={e => setNovoInq({ ...novoInq, cpf: e.target.value })}
-                           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarInquilino() } }} />
-                  </div>
-                  <div>
-                    <label>Telefone / WhatsApp</label>
-                    <input value={novoInq.telefone} inputMode="tel" placeholder="(11) 90000-0000"
-                           onChange={e => setNovoInq({ ...novoInq, telefone: e.target.value })}
-                           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarInquilino() } }} />
-                  </div>
-                </div>
+                <label>Telefone / WhatsApp</label>
+                <input value={novoInq.telefone} inputMode="tel" placeholder="(11) 90000-0000"
+                       onChange={e => setNovoInq({ ...novoInq, telefone: e.target.value })}
+                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarInquilino() } }} />
                 <div className="linha mt">
                   <button type="button" className="secundario" onClick={() => setNovoInq(null)}>Cancelar</button>
                   <button type="button" className="ouro" onClick={adicionarInquilino}>Adicionar e usar</button>
@@ -367,58 +263,24 @@ export default function Contratos() {
                   {inquilinos.map(i => <option key={i.id} value={i.id}>{i.nome}</option>)}
                 </select>
                 <button type="button" className="secundario" title="Cadastrar novo inquilino aqui"
-                        onClick={() => { setErro(''); setNovoInq({ nome: '', cpf: '', telefone: '' }) }}>+ novo</button>
+                        onClick={() => { setErro(''); setNovoInq({ nome: '', telefone: '' }) }}>+ novo</button>
               </div>
             )}
 
             <label>Quarto *</label>
-            {novoQ ? (
-              <div className="card" style={{ padding: 12, borderColor: 'var(--cor-ouro)' }}>
-                <label>Casa *</label>
-                <select value={novoQ.casa_id} autoFocus
-                        onChange={e => setNovoQ({ ...novoQ, casa_id: e.target.value })}>
-                  <option value="">— escolher —</option>
-                  {casas.map(h => <option key={h.id} value={h.id}>{h.nome}</option>)}
-                </select>
-                <div className="linha">
-                  <div>
-                    <label>Identificação do quarto *</label>
-                    <input value={novoQ.identificacao} placeholder="Ex.: Quarto 1 / Suíte / 101"
-                           onChange={e => setNovoQ({ ...novoQ, identificacao: e.target.value })}
-                           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarQuarto() } }} />
-                  </div>
-                  <div>
-                    <label>Valor final (R$/mês)</label>
-                    <input inputMode="decimal" value={novoQ.valor_final} placeholder="0,00"
-                           onChange={e => setNovoQ({ ...novoQ, valor_final: e.target.value })}
-                           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarQuarto() } }} />
-                  </div>
-                </div>
-                <div className="linha mt">
-                  <button type="button" className="secundario" onClick={() => setNovoQ(null)}>Cancelar</button>
-                  <button type="button" className="ouro" onClick={adicionarQuarto}>Adicionar e usar</button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 8 }}>
-                <select style={{ flex: 1 }} value={editando.quarto_id}
-                        onChange={e => escolherQuarto(e.target.value)}>
-                  <option value="">— escolher —</option>
-                  {quartos.map(q => {
-                    const ocupado = quartoOcupadoPor[q.id] && quartoOcupadoPor[q.id] !== editando.id
-                    const casa = q.casas?.nome ? `${q.casas.nome} · ` : ''
-                    return (
-                      <option key={q.id} value={q.id} disabled={ocupado}>
-                        {casa}{q.identificacao}{ocupado ? ' (ocupado)' : ''}
-                      </option>
-                    )
-                  })}
-                </select>
-                <button type="button" className="secundario" title="Cadastrar novo quarto aqui"
-                        disabled={semCasas}
-                        onClick={() => { setErro(''); setNovoQ({ casa_id: casas.length === 1 ? casas[0].id : '', identificacao: '', valor_final: '' }) }}>+ novo</button>
-              </div>
-            )}
+            <select value={editando.quarto_id}
+                    onChange={e => escolherQuarto(e.target.value)}>
+              <option value="">— escolher —</option>
+              {quartos.map(q => {
+                const ocupado = quartoOcupadoPor[q.id] && quartoOcupadoPor[q.id] !== editando.id
+                const casa = q.casas?.nome ? `${q.casas.nome} · ` : ''
+                return (
+                  <option key={q.id} value={q.id} disabled={ocupado}>
+                    {casa}{q.identificacao}{ocupado ? ' (ocupado)' : ''}
+                  </option>
+                )
+              })}
+            </select>
 
             <div className="linha">
               <div>

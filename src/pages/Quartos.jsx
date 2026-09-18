@@ -72,16 +72,6 @@ export default function Quartos() {
     }
     if (!payload.identificacao) { setErro('Informe a identificação do quarto.'); return }
 
-    // Evita duplicidade: mesma identificação em outro quarto desta casa.
-    const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
-    const existente = quartos.find(x => x.id !== editando.id && norm(x.identificacao) === norm(payload.identificacao))
-    if (existente) {
-      const ok = window.confirm(
-        `Já existe um quarto "${existente.identificacao}" nesta casa.\n\n` +
-        `OK = salvar assim mesmo (vai duplicar)\nCancelar = voltar`)
-      if (!ok) return
-    }
-
     const q = editando.id
       ? supabase.from('quartos').update(payload).eq('id', editando.id)
       : supabase.from('quartos').insert(payload)
