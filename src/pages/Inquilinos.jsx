@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useOrg } from '../context/OrgContext'
+import { comprimirImagem } from '../lib/imagem'
 import Modal from '../components/Modal'
 
 const vazio = {
   nome: '', cpf: '', telefone: '', email: '',
-  contato_emergencia: '', observacoes: ''
+  contato_emergencia: '', observacoes: '', documento_url: null
 }
 
 // Só dígitos → link wa.me (assume Brasil se vier sem DDI).
@@ -24,6 +25,8 @@ export default function Inquilinos() {
   const [editando, setEditando] = useState(null)
   const [busca, setBusca] = useState('')
   const [erro, setErro] = useState('')
+  const [docUrl, setDocUrl] = useState(null)   // prévia/URL assinada da foto do documento
+  const [docBusy, setDocBusy] = useState(false)
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -46,8 +49,41 @@ export default function Inquilinos() {
 
   useEffect(() => { carregar() }, [carregar])
 
-  function abrirNovo() { setErro(''); setEditando({ ...vazio }) }
-  function abrirEdicao(i) { setErro(''); setEditando({ ...i }) }
+  function abrirNovo() { setErro(''); setDocUrl(null); setEditando({ ...vazio }) }
+  function abrirEdicao(i) {
+    setErro(''); setDocUrl(null)
+    setEditando({ ...i })
+    if (i.documento_url) {
+      supabase.storage.from('comprovantes').createSignedUrl(i.documento_url, 3600)
+        .then(({ data }) => { if (data?.signedUrl) setDocUrl(data.signedUrl) })
+    }
+  }
+
+  // Foto do documento (RG/CPF): comprime e sobe pro bucket privado na hora.
+  async function enviarDocumento(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setErro(''); setDocBusy(true)
+    try {
+      const { blob, previa } = await comprimirImagem(file)
+      const antigo = editando.documento_url
+      const path = `${org.id}/documentos/${crypto.randomUUID()}.jpg`
+      const { error } = await supabase.storage.from('comprovantes').upload(path, blob, { contentType: 'image/jpeg' })
+      if (error) throw error
+      if (antigo) supabase.storage.from('comprovantes').remove([antigo]) // best-effort
+      setEditando(ed => ({ ...ed, documento_url: path }))
+      setDocUrl(previa)
+    } catch (err) { setErro('Falha ao enviar o documento: ' + err.message) }
+    setDocBusy(false)
+  }
+
+  function removerDocumento() {
+    const antigo = editando.documento_url
+    if (antigo) supabase.storage.from('comprovantes').remove([antigo]) // best-effort
+    setEditando(ed => ({ ...ed, documento_url: null }))
+    setDocUrl(null)
+  }
 
   async function salvar(e) {
     e.preventDefault()
@@ -59,9 +95,24 @@ export default function Inquilinos() {
       telefone: editando.telefone?.trim() || null,
       email: editando.email?.trim() || null,
       contato_emergencia: editando.contato_emergencia?.trim() || null,
-      observacoes: editando.observacoes?.trim() || null
+      observacoes: editando.observacoes?.trim() || null,
+      documento_url: editando.documento_url || null
     }
     if (!payload.nome) { setErro('Informe o nome do inquilino.'); return }
+
+    // Evita duplicidade: mesmo nome ou mesmo CPF em outro cadastro.
+    const norm = s => String(s || '').trim().toLowerCase().replace(/\s+/g, ' ')
+    const soDig = s => String(s || '').replace(/\D/g, '')
+    const cpf = soDig(payload.cpf)
+    const existente = inquilinos.find(i =>
+      i.id !== editando.id &&
+      (norm(i.nome) === norm(payload.nome) || (cpf && cpf.length >= 11 && soDig(i.cpf) === cpf)))
+    if (existente) {
+      const ok = window.confirm(
+        `Já existe um inquilino cadastrado como "${existente.nome}".\n\n` +
+        `OK = salvar assim mesmo (vai duplicar)\nCancelar = voltar`)
+      if (!ok) return
+    }
 
     const q = editando.id
       ? supabase.from('inquilinos').update(payload).eq('id', editando.id)
@@ -183,6 +234,35 @@ export default function Inquilinos() {
             <input value={editando.contato_emergencia || ''}
                    onChange={e => setEditando({ ...editando, contato_emergencia: e.target.value })}
                    placeholder="nome e telefone de um parente/amigo" />
+
+            <label>Foto do documento (RG/CPF)</label>
+            {docUrl ? (
+              <div className="card" style={{ padding: 10 }}>
+                <a href={docUrl} target="_blank" rel="noopener noreferrer">
+                  <img src={docUrl} alt="Documento do inquilino"
+                       style={{ display: 'block', maxWidth: '100%', maxHeight: 240, borderRadius: 8, margin: '0 auto' }} />
+                </a>
+                <div className="linha mt">
+                  <label className="secundario" style={{ textAlign: 'center', cursor: 'pointer', margin: 0 }}>
+                    {docBusy ? 'Enviando…' : 'Trocar foto'}
+                    <input type="file" accept="image/*" capture="environment" hidden disabled={docBusy}
+                           onChange={enviarDocumento} />
+                  </label>
+                  <button type="button" className="secundario" onClick={removerDocumento} disabled={docBusy}>Remover</button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="secundario" style={{ display: 'inline-block', cursor: 'pointer' }}>
+                  {docBusy ? 'Enviando…' : '📷 Adicionar foto do documento'}
+                  <input type="file" accept="image/*" capture="environment" hidden disabled={docBusy}
+                         onChange={enviarDocumento} />
+                </label>
+                <p className="sub" style={{ marginTop: 6 }}>
+                  Foto do RG ou CPF. Fica guardada de forma privada (só a sua conta acessa).
+                </p>
+              </div>
+            )}
 
             <label>Observações</label>
             <textarea rows={2} value={editando.observacoes || ''}
