@@ -1,32 +1,42 @@
 name: Keep Supabase awake
 
-# Projetos Supabase no plano free pausam após ~7 dias sem atividade.
-# Este workflow bate no banco 2x por semana (seg e qui) para gerar tráfego
-# e manter o intervalo < 7 dias — o KitGest nunca dorme.
+# Projetos Supabase free pausam após ~7 dias sem atividade.
 #
-# Um projeto PAUSADO não estabelece conexão (curl devolve código 000).
-# Um projeto ATIVO responde algum HTTP (200 com sessão, 401 sem — ambos provam
-# que o servidor está de pé). Por isso: 000 = alerta; qualquer outro = ok.
+# LIÇÃO APRENDIDA (set/2026): o ping antigo batia em /rest/v1/orgs e recebia
+# 401 (RLS bloqueia a chave anônima). Requisição RECUSADA não conta como
+# atividade — o projeto pausou ~3 dias após um ping "com sucesso" (401).
+# Além disso, projeto PAUSADO some do DNS: o curl falha ao resolver o host
+# (exit 6), não devolve HTTP 000 como o script antigo supunha, e como o
+# GitHub roda `bash -eo pipefail` o script morria antes de alertar.
+#
+# AGORA: chamamos a RPC public.keepalive() (migração 0010), que executa uma
+# consulta REAL e devolve 200 = atividade de verdade. Rodamos a cada 2 dias
+# (folga confortável < 7) e tratamos falha de DNS/HTTP corretamente.
 
 on:
   schedule:
-    - cron: "0 9 * * 1,4"   # 09:00 UTC toda segunda e quinta
-  workflow_dispatch:          # permite rodar manualmente pelo botão do Actions
+    - cron: "17 6 */2 * *"   # a cada 2 dias, 06:17 UTC (minuto "quebrado" reduz atraso/skip do GitHub)
+  workflow_dispatch:          # botão de rodar manualmente no Actions
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase (KitGest)
+      - name: Ping Supabase (KitGest) via RPC keepalive
         run: |
           URL="https://geltxfbwrqmacshwaveh.supabase.co"
           KEY="sb_publishable_MnG02iBufzW0rQ9taraJ1A_jdIvP_US"
-          code=$(curl -s -o /dev/null --max-time 30 -w "%{http_code}" \
-            "$URL/rest/v1/orgs?select=id&limit=1" \
-            -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
-          echo "Resposta do banco: HTTP $code"
-          if [ "$code" = "000" ]; then
-            echo "::error::Sem conexão com o Supabase — projeto pode estar PAUSADO. Reative no dashboard."
+          set +e
+          code=$(curl -s -o /tmp/body.txt --max-time 30 -w "%{http_code}" \
+            -X POST "$URL/rest/v1/rpc/keepalive" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+            -H "Content-Type: application/json" -d '{}')
+          curl_exit=$?
+          set -e
+          echo "curl_exit=$curl_exit · HTTP=$code · corpo=$(cat /tmp/body.txt 2>/dev/null)"
+          # curl_exit 6 = não resolveu o host = projeto PAUSADO. Qualquer HTTP != 200 = problema.
+          if [ "$curl_exit" != "0" ] || [ "$code" != "200" ]; then
+            echo "::error::KitGest Supabase NAO respondeu 200 (curl=$curl_exit HTTP=$code). Projeto provavelmente PAUSADO — reative em https://supabase.com/dashboard/project/geltxfbwrqmacshwaveh"
             exit 1
           fi
-          echo "Banco acordado (respondeu HTTP $code) — atividade registrada."
+          echo "✅ Banco acordado com atividade REAL (HTTP 200)."

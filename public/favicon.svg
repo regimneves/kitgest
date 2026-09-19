@@ -1,5 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#1e293b"/>
-  <text x="32" y="42" font-family="Poppins,Arial,sans-serif" font-size="26"
-        font-weight="700" fill="#eab308" text-anchor="middle">KG</text>
+  <defs>
+    <linearGradient id="kgBg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5B54F2"/>
+      <stop offset=".58" stop-color="#383499"/>
+      <stop offset="1" stop-color="#241F5E"/>
+    </linearGradient>
+    <linearGradient id="kgShield" x1="-124" y1="-144" x2="124" y2="144" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7DEEFF"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#kgBg)"/>
+  <g transform="translate(32 32.5) scale(0.182)">
+    <path d="M0 -144 L124 -88 C124 24 70 108 0 144 C-70 108 -124 24 -124 -88 Z"
+          fill="#2D286E" fill-opacity="0.55" stroke="url(#kgShield)" stroke-width="11" stroke-linejoin="round"/>
+    <path d="M-56 -6 L0 -56 L56 -6 L56 64 L-56 64 Z"
+          fill="#ffffff" fill-opacity="0.12" stroke="#ffffff" stroke-width="9" stroke-linejoin="round"/>
+    <circle cx="0" cy="14" r="11" fill="#7DEEFF"/>
+    <rect x="-4.5" y="20" width="9" height="20" rx="4" fill="#7DEEFF"/>
+    <circle cx="84" cy="-76" r="7" fill="#34D399"/>
+  </g>
 </svg>
