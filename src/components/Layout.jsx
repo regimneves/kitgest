@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useOrg } from '../context/OrgContext'
@@ -9,6 +10,17 @@ export default function Layout() {
   const { sair, user } = useAuth()
   const { org, diasRestantes, ehAdmin } = useOrg()
   const online = useOnline()
+  const [tema, setTema] = useState(
+    () => document.documentElement.getAttribute('data-theme') === 'light' ? 'claro' : 'escuro'
+  )
+  function alternarTema() {
+    const novo = tema === 'claro' ? 'escuro' : 'claro'
+    const root = document.documentElement
+    if (novo === 'claro') root.setAttribute('data-theme', 'light')
+    else root.removeAttribute('data-theme')
+    try { localStorage.setItem('kg-tema', novo) } catch (e) {}
+    setTema(novo)
+  }
 
   const emTrial = org?.situacao === 'trial'
   const avisarVenc = diasRestantes != null && diasRestantes <= 7
@@ -28,6 +40,11 @@ export default function Layout() {
           ? <img src={org.logo_url} alt="logo" style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover' }} />
           : <span style={{ fontWeight: 700, color: 'var(--cor-ouro)' }}>KG</span>}
         <strong style={{ flex: 1 }}>{org?.nome || 'KitGest'}</strong>
+        <button className="secundario" onClick={alternarTema}
+                title={tema === 'claro' ? 'Mudar para tema escuro' : 'Mudar para tema claro'}
+                style={{ padding: '8px 12px' }}>
+          {tema === 'claro' ? '🌙' : '☀️'}
+        </button>
         <button className="secundario" onClick={sair} title={user?.email}>Sair</button>
       </header>
 

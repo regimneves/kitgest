@@ -13,6 +13,16 @@
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* Tema claro (opcional): o cliente troca pelo botão no topo; padrão é escuro. */
+:root[data-theme="light"] {
+  --bg: #eef2f7;
+  --surface: #ffffff;
+  --surface-2: #eef2f7;
+  --texto: #0f172a;
+  --texto-fraco: #5b6674;
+  --borda: #d9e0ea;
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 body {
