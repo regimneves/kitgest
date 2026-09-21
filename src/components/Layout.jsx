@@ -53,6 +53,7 @@ export default function Layout() {
       <nav style={{ display: 'flex', gap: 12, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--borda)' }}>
         <NavLink to="/" end style={navStyle}>Início</NavLink>
         <NavLink to="/casas" style={navStyle}>Casas</NavLink>
+        <NavLink to="/importar" style={navStyle}>Importar</NavLink>
         <NavLink to="/inquilinos" style={navStyle}>Inquilinos</NavLink>
         <NavLink to="/contratos" style={navStyle}>Contratos</NavLink>
         <NavLink to="/recebimentos" style={navStyle}>Receber</NavLink>

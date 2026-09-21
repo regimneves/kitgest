@@ -95,6 +95,7 @@ export default function Casas() {
           <h1>Casas</h1>
           <p className="sub" style={{ margin: 0 }}>Imóveis sublocados e o critério de rateio das despesas.</p>
         </div>
+        <button className="secundario" onClick={() => navigate('/importar')}>⬆ Importar planilha</button>
         <button className="ouro" onClick={abrirNova}>+ Nova casa</button>
       </div>
 

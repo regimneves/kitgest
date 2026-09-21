@@ -7,6 +7,7 @@ import Config from './pages/Config'
 import Home from './pages/Home'
 import Casas from './pages/Casas'
 import Quartos from './pages/Quartos'
+import Importar from './pages/Importar'
 import Inquilinos from './pages/Inquilinos'
 import Contratos from './pages/Contratos'
 import Recebimentos from './pages/Recebimentos'
@@ -74,6 +75,7 @@ export default function App() {
         <Route path="/admin" element={<Admin />} />
         <Route path="/" element={<Home />} />
         <Route path="/casas" element={<Casas />} />
+        <Route path="/importar" element={<Importar />} />
         <Route path="/casas/:casaId/quartos" element={<Quartos />} />
         <Route path="/casas/:casaId/composicao" element={<Composicao />} />
         <Route path="/inquilinos" element={<Inquilinos />} />
