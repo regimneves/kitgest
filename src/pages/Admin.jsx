@@ -35,7 +35,8 @@ export default function Admin() {
 
   useEffect(() => { carregar() }, [carregar])
 
-  async function definir(org, situacao, expira) {
+  async function definir(org, situacao, expira, aviso) {
+    if (aviso && !window.confirm(aviso)) return
     setBusy(org.id)
     const { error } = await supabase.rpc('admin_definir_acesso', {
       p_org: org.id, p_situacao: situacao, p_expira: expira,
@@ -48,62 +49,54 @@ export default function Admin() {
   if (orgs === null) return <div className="sub">Carregando clientes…</div>
 
   return (
-    <div className="stack">
+    <div style={{ maxWidth: 820, margin: '0 auto' }}>
       <div>
         <h1>Administração</h1>
-        <div className="sub">Controle de acesso dos clientes (liberar, renovar e suspender).</div>
+        <div className="sub" style={{ margin: '4px 0 16px' }}>
+          Controle de acesso dos clientes — liberar, renovar e suspender. {orgs.length} conta(s).
+        </div>
       </div>
       {erro && <div className="erro">{erro}</div>}
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '.92rem' }}>
-          <thead>
-            <tr style={{ textAlign: 'left', color: 'var(--texto-fraco)' }}>
-              <th style={th}>Cliente</th>
-              <th style={th}>Situação</th>
-              <th style={th}>Vence em</th>
-              <th style={th}>Casas</th>
-              <th style={th}>Contratos</th>
-              <th style={th}>Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orgs.map(o => {
-              const s = SIT[o.situacao] || SIT.trial
-              const emBusy = busy === o.id
-              return (
-                <tr key={o.id} style={{ borderTop: '1px solid var(--borda)' }}>
-                  <td style={td}><strong>{o.nome || '(sem nome)'}</strong></td>
-                  <td style={td}>
-                    <span style={{ background: s.bg, color: s.cor, padding: '2px 9px', borderRadius: 999, fontSize: '.8rem', fontWeight: 600 }}>
-                      {s.txt}
-                    </span>
-                  </td>
-                  <td style={td}>{o.acesso_expira_em ? formatarData(o.acesso_expira_em) : '—'}</td>
-                  <td style={td}>{o.casas}</td>
-                  <td style={td}>{o.contratos_ativos}</td>
-                  <td style={{ ...td, whiteSpace: 'nowrap' }}>
-                    <button className="secundario" disabled={emBusy}
-                      onClick={() => definir(o, 'ativa', isoMais(365, o.acesso_expira_em))}
-                      title="Ativa e soma 1 ano ao vencimento">+1 ano</button>{' '}
-                    <button className="secundario" disabled={emBusy}
-                      onClick={() => definir(o, 'ativa', venceEm(30))}
-                      title="Ativa por 30 dias a partir de hoje">30 dias</button>{' '}
-                    {o.situacao === 'suspensa'
-                      ? <button className="secundario" disabled={emBusy}
-                          onClick={() => definir(o, 'ativa', o.acesso_expira_em)}>Reativar</button>
-                      : <button className="secundario" disabled={emBusy}
-                          onClick={() => definir(o, 'suspensa', o.acesso_expira_em)}>Suspender</button>}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+      <div style={{ display: 'grid', gap: 12 }}>
+        {orgs.map(o => {
+          const s = SIT[o.situacao] || SIT.trial
+          const emBusy = busy === o.id
+          return (
+            <div key={o.id} className="card" style={{ padding: 16, display: 'grid', gap: 11 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <strong style={{ flex: 1, minWidth: 140, fontSize: '1.02rem' }}>{o.nome || '(sem nome)'}</strong>
+                <span style={{ background: s.bg, color: s.cor, padding: '3px 11px', borderRadius: 999, fontSize: '.78rem', fontWeight: 700 }}>
+                  {s.txt}
+                </span>
+              </div>
+
+              <div className="sub" style={{ margin: 0, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+                <span>Vence: <b style={{ color: 'var(--texto)' }}>{o.acesso_expira_em ? formatarData(o.acesso_expira_em) : '—'}</b></span>
+                <span>Casas: <b style={{ color: 'var(--texto)' }}>{o.casas}</b></span>
+                <span>Contratos: <b style={{ color: 'var(--texto)' }}>{o.contratos_ativos}</b></span>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button className="ouro" disabled={emBusy}
+                  onClick={() => definir(o, 'ativa', isoMais(365, o.acesso_expira_em))}
+                  title="Ativa e soma 1 ano ao vencimento">+1 ano</button>
+                <button className="secundario" disabled={emBusy}
+                  onClick={() => definir(o, 'ativa', venceEm(30))}
+                  title="Ativa por 30 dias a partir de hoje">30 dias</button>
+                {o.situacao === 'suspensa'
+                  ? <button className="secundario" disabled={emBusy}
+                      onClick={() => definir(o, 'ativa', o.acesso_expira_em)}>Reativar</button>
+                  : <button className="secundario" disabled={emBusy}
+                      style={{ color: '#f0a58f' }}
+                      onClick={() => definir(o, 'suspensa', o.acesso_expira_em,
+                        `Suspender o acesso de "${o.nome || 'esta conta'}"? Ela deixa de usar o sistema até você reativar.`)}>
+                      Suspender</button>}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
 }
-
-const th = { padding: '8px 10px', fontWeight: 600 }
-const td = { padding: '10px' }
