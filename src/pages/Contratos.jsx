@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import { useOrg } from '../context/OrgContext'
-import { formatarMoeda, parseMoeda } from '../lib/format'
+import { formatarMoeda, parseMoeda, compararNatural, ordenarQuartos } from '../lib/format'
 import Modal from '../components/Modal'
 
 // Normalização para comparar cadastros e evitar duplicidade.
@@ -51,7 +51,7 @@ export default function Contratos() {
     if (error) setErro(error.message)
     setContratos(cs || [])
     setInquilinos(is || [])
-    setQuartos(qs || [])
+    setQuartos(ordenarQuartos(qs || []))
     setCasas(hs || [])
     setCarregando(false)
   }, [])
@@ -150,7 +150,7 @@ export default function Contratos() {
                 aluguel_base: valor, valor_final: valor, status: 'vago' })
       .select('id, identificacao, valor_final, casa_id, casas(nome)').single()
     if (error) { setErro(error.message); return }
-    setQuartos(prev => [...prev, data].sort((a, b) => (a.identificacao || '').localeCompare(b.identificacao || '')))
+    setQuartos(prev => ordenarQuartos([...prev, data]))
     setEditando(ed => ({
       ...ed,
       quarto_id: data.id,
@@ -248,9 +248,17 @@ export default function Contratos() {
     carregar()
   }
 
-  const lista = filtro === 'vigentes'
-    ? contratos.filter(c => VIGENTE.has(c.status))
-    : contratos
+  const lista = useMemo(() => {
+    const base = filtro === 'vigentes'
+      ? contratos.filter(c => VIGENTE.has(c.status))
+      : contratos
+    // Ordena por casa e depois pela identificação do quarto (natural).
+    return [...base].sort((a, b) => {
+      const ca = compararNatural(a.quartos?.casas?.nome, b.quartos?.casas?.nome)
+      if (ca !== 0) return ca
+      return compararNatural(a.quartos?.identificacao, b.quartos?.identificacao)
+    })
+  }, [contratos, filtro])
 
   const semCasas = casas.length === 0
 

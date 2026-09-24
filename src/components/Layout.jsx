@@ -3,6 +3,7 @@ import { Outlet, NavLink } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useOrg } from '../context/OrgContext'
 import { useOnline } from '../lib/useOnline'
+import { useBackupAutomatico } from '../lib/backupLocal'
 
 // Shell básico do app. Nas próximas fases: celular = bottom nav operacional,
 // PC = sidebar de retaguarda. Aqui fica o topo comum + navegação mínima.
@@ -10,6 +11,7 @@ export default function Layout() {
   const { sair, user } = useAuth()
   const { org, diasRestantes, ehAdmin } = useOrg()
   const online = useOnline()
+  useBackupAutomatico(org) // cópia local automática 1x/semana (sobrescreve a anterior)
   const [tema, setTema] = useState(
     () => document.documentElement.getAttribute('data-theme') === 'light' ? 'claro' : 'escuro'
   )
@@ -73,8 +75,7 @@ export default function Layout() {
         <NavLink to="/importar" style={navStyle}>Importar</NavLink>
         <NavLink to="/inquilinos" style={navStyle}>Inquilinos</NavLink>
         <NavLink to="/contratos" style={navStyle}>Contratos</NavLink>
-        <NavLink to="/recebimentos" style={navStyle}>Receber</NavLink>
-        <NavLink to="/cobranca" style={navStyle}>Cobrança</NavLink>
+        <NavLink to="/recebimentos" style={navStyle}>Receber &amp; Cobrança</NavLink>
         <NavLink to="/avisos" style={navStyle}>Avisos</NavLink>
         <NavLink to="/contas-pagar" style={navStyle}>Contas a pagar</NavLink>
         <NavLink to="/fluxo-caixa" style={navStyle}>Fluxo de caixa</NavLink>
@@ -84,6 +85,7 @@ export default function Layout() {
         <NavLink to="/acertos" style={navStyle}>Acerto</NavLink>
         <NavLink to="/manutencao" style={navStyle}>Manutenção</NavLink>
         <NavLink to="/relatorios" style={navStyle}>Relatórios</NavLink>
+        <NavLink to="/backup" style={navStyle}>Backup</NavLink>
         <NavLink to="/config" style={navStyle}>Configuração</NavLink>
         {ehAdmin && <NavLink to="/admin" style={navStyle}>🛠️ Admin</NavLink>}
       </nav>

@@ -30,10 +30,7 @@ export default function Home() {
           <strong>Contratos</strong><p className="sub">inquilino × quarto →</p>
         </Link>
         <Link to="/recebimentos" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <strong>Recebimentos</strong><p className="sub">aluguel · recibo · PIX →</p>
-        </Link>
-        <Link to="/cobranca" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <strong>Cobrança</strong><p className="sub">quem deve · WhatsApp →</p>
+          <strong>Receber &amp; Cobrança</strong><p className="sub">marcar pago · recibo · PIX · WhatsApp →</p>
         </Link>
         <Link to="/avisos" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
           <strong>Avisos de vencimento</strong><p className="sub">lembrete 7 · 2 · 0 dias →</p>
@@ -61,6 +58,9 @@ export default function Home() {
         </Link>
         <Link to="/relatorios" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
           <strong>Relatórios</strong><p className="sub">rent roll · margem · inadimplência →</p>
+        </Link>
+        <Link to="/backup" className="card" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <strong>Backup</strong><p className="sub">baixar cópia dos dados →</p>
         </Link>
       </div>
     </div>

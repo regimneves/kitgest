@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { formatarMoeda, formatarCompetencia } from '../lib/format'
+import { vencimentoNaCompetencia, diasAte } from '../lib/gestao'
 
 const VIGENTE = new Set(['ativo', 'inadimplente', 'pendente'])
 const mesAtual = () => new Date().toISOString().slice(0, 7)
@@ -110,6 +111,23 @@ export default function Relatorios() {
 
   const nomeCasa = (id) => casas.find(c => c.id === id)?.nome || ''
 
+  // Ranking de inadimplência POR CASA: total em aberto e atraso mais antigo, do pior p/ o melhor.
+  const emAbertoPorCasa = useMemo(() => {
+    const m = new Map()
+    for (const c of inadimplentes) {
+      const casaId = c.quartos?.casa_id
+      const venc = vencimentoNaCompetencia(c.dia_vencimento, competencia)
+      const dias = venc ? diasAte(venc) : null
+      const atraso = dias != null && dias < 0 ? -dias : 0
+      const cur = m.get(casaId) || { casaId, nome: nomeCasa(casaId) || '—', qtd: 0, total: 0, piorAtraso: 0 }
+      cur.qtd++
+      cur.total += Number(c.valor_aluguel || 0)
+      cur.piorAtraso = Math.max(cur.piorAtraso, atraso)
+      m.set(casaId, cur)
+    }
+    return [...m.values()].sort((a, b) => (b.total - a.total) || (b.piorAtraso - a.piorAtraso))
+  }, [inadimplentes, competencia, casas]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (carregando) return <p className="sub">Carregando…</p>
 
   return (
@@ -174,6 +192,43 @@ export default function Relatorios() {
           )}
         </table>
       </div>
+
+      {/* Ranking de inadimplência por casa */}
+      <h1 style={{ fontSize: '1.2rem', marginTop: 22 }}>
+        Em aberto por casa · {formatarCompetencia(`${competencia}-01`)}
+      </h1>
+      <p className="sub" style={{ marginTop: 0 }}>Quanto cada casa tem em aberto no mês — da que mais deve para a que menos deve.</p>
+      {emAbertoPorCasa.length === 0 ? (
+        <div className="card"><p className="sub" style={{ margin: 0 }}>
+          {contratos.length === 0 ? 'Nenhum contrato vigente.' : '✅ Nenhuma casa com aluguel em aberto neste mês.'}
+        </p></div>
+      ) : (
+        <div className="card" style={{ overflowX: 'auto', padding: 0 }}>
+          <table style={tab}>
+            <thead><tr style={trh}>
+              <th style={th}>#</th><th style={th}>Casa</th><th style={thC}>Em aberto</th>
+              <th style={thC}>Atraso mais antigo</th><th style={thR}>Total em aberto</th>
+            </tr></thead>
+            <tbody>
+              {emAbertoPorCasa.map((r, i) => (
+                <tr key={r.casaId || i} style={trb}>
+                  <td style={{ ...td, fontWeight: 700, color: i === 0 ? '#ef4444' : 'var(--texto-fraco)' }}>{i + 1}º</td>
+                  <td style={td}>{r.nome}</td>
+                  <td style={tdC}>{r.qtd}</td>
+                  <td style={tdC}>{r.piorAtraso > 0 ? `${r.piorAtraso} dia(s)` : '—'}</td>
+                  <td style={{ ...tdR, fontWeight: 700, color: '#ef4444' }}>{formatarMoeda(r.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot><tr>
+              <td style={{ ...td, fontWeight: 700 }} colSpan={4}>Total geral em aberto</td>
+              <td style={{ ...tdR, fontWeight: 700, color: '#ef4444' }}>
+                {formatarMoeda(emAbertoPorCasa.reduce((s, r) => s + r.total, 0))}
+              </td>
+            </tr></tfoot>
+          </table>
+        </div>
+      )}
 
       {/* Inadimplência */}
       <h1 style={{ fontSize: '1.2rem', marginTop: 22 }}>

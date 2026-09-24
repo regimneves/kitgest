@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useOrg } from '../context/OrgContext'
-import { formatarMoeda, parseMoeda } from '../lib/format'
+import { formatarMoeda, parseMoeda, compararNatural } from '../lib/format'
+import { vencimentoNaCompetencia, diasAte, mesAtual, competenciaISO } from '../lib/gestao'
 import Modal from '../components/Modal'
 
 const CRITERIOS = {
@@ -16,40 +17,104 @@ const vazia = {
   criterio_rateio: 'igual', qtd_quartos_ref: '', observacoes: '', ativo: true
 }
 
+const VIGENTE = new Set(['ativo', 'inadimplente', 'pendente'])
+
+// Estado visual de cada quarto no painel.
+const ESTADO = {
+  atrasado:   { cor: '#ef4444', label: 'Atrasado' },
+  ocupado:    { cor: '#3b82f6', label: 'Ocupado' },
+  pago:       { cor: '#22c55e', label: 'Pago no mês' },
+  vago:       { cor: '#94a3b8', label: 'Vago' },
+  manutencao: { cor: '#f97316', label: 'Manutenção' },
+  reservado:  { cor: '#eab308', label: 'Reservado' }
+}
+
 export default function Casas() {
   const { org } = useOrg()
   const navigate = useNavigate()
   const [casas, setCasas] = useState([])
-  const [contagem, setContagem] = useState({})   // casa_id -> nº de quartos
+  const [quartos, setQuartos] = useState([])
+  const [contratos, setContratos] = useState([])   // vigentes
+  const [pagos, setPagos] = useState(() => new Set()) // contrato_id pagos no mês
   const [carregando, setCarregando] = useState(true)
-  const [editando, setEditando] = useState(null) // objeto do form ou null
+  const [editando, setEditando] = useState(null)
   const [erro, setErro] = useState('')
 
   const carregar = useCallback(async () => {
     setCarregando(true)
-    const { data: cs, error } = await supabase
-      .from('casas').select('*').order('nome')
+    const mes = mesAtual()
+    const [{ data: cs, error }, { data: qs }, { data: ctr }, { data: recs }] = await Promise.all([
+      supabase.from('casas').select('*').order('nome'),
+      supabase.from('quartos').select('id, casa_id, identificacao, status, valor_final'),
+      supabase.from('contratos')
+        .select('id, quarto_id, dia_vencimento, valor_aluguel, status, inquilinos(nome)')
+        .in('status', ['ativo', 'inadimplente', 'pendente']),
+      supabase.from('recebimentos').select('contrato_id, status').eq('competencia', competenciaISO(mes))
+    ])
     if (error) setErro(error.message)
     setCasas(cs || [])
-
-    // contagem de quartos por casa
-    const { data: qs } = await supabase.from('quartos').select('casa_id')
-    const cont = {}
-    for (const q of qs || []) cont[q.casa_id] = (cont[q.casa_id] || 0) + 1
-    setContagem(cont)
+    setQuartos(qs || [])
+    setContratos(ctr || [])
+    const s = new Set()
+    for (const r of recs || []) if (r.status === 'pago') s.add(r.contrato_id)
+    setPagos(s)
     setCarregando(false)
   }, [])
 
   useEffect(() => { carregar() }, [carregar])
 
+  // Contrato vigente por quarto (p/ inquilino + vencimento).
+  const contratoPorQuarto = useMemo(() => {
+    const m = new Map()
+    for (const c of contratos) if (VIGENTE.has(c.status)) m.set(c.quarto_id, c)
+    return m
+  }, [contratos])
+
+  // Monta, por casa, a lista de quartos já com estado visual + números do cabeçalho.
+  const painel = useMemo(() => {
+    const mes = mesAtual()
+    const porCasa = new Map()
+    for (const q of quartos) {
+      const c = contratoPorQuarto.get(q.id)
+      let estado, dias = null, atraso = 0, inquilino = null
+      if (q.status === 'manutencao') estado = 'manutencao'
+      else if (c) {
+        inquilino = c.inquilinos?.nome || null
+        const pago = pagos.has(c.id)
+        const venc = vencimentoNaCompetencia(c.dia_vencimento, mes)
+        dias = venc ? diasAte(venc) : null
+        if (pago) estado = 'pago'
+        else if (dias != null && dias < 0) { estado = 'atrasado'; atraso = -dias }
+        else estado = 'ocupado'
+      } else if (q.status === 'reservado') estado = 'reservado'
+      else estado = 'vago'
+
+      const item = { ...q, estado, atraso, inquilino, contrato: c || null }
+      if (!porCasa.has(q.casa_id)) porCasa.set(q.casa_id, [])
+      porCasa.get(q.casa_id).push(item)
+    }
+    // ordena quartos naturalmente dentro da casa
+    for (const arr of porCasa.values()) arr.sort((a, b) => compararNatural(a.identificacao, b.identificacao))
+    return porCasa
+  }, [quartos, contratoPorQuarto, pagos])
+
+  function resumoCasa(lista) {
+    const r = { total: lista.length, ocupados: 0, vagos: 0, atrasados: 0, receita: 0 }
+    for (const q of lista) {
+      if (q.estado === 'vago') r.vagos++
+      if (q.estado === 'ocupado' || q.estado === 'pago' || q.estado === 'atrasado') {
+        r.ocupados++
+        r.receita += Number(q.contrato?.valor_aluguel || q.valor_final || 0)
+      }
+      if (q.estado === 'atrasado') r.atrasados++
+    }
+    return r
+  }
+
   function abrirNova() { setErro(''); setEditando({ ...vazia }) }
   function abrirEdicao(c) {
     setErro('')
-    setEditando({
-      ...c,
-      aluguel_mae: c.aluguel_mae ?? '',
-      qtd_quartos_ref: c.qtd_quartos_ref ?? ''
-    })
+    setEditando({ ...c, aluguel_mae: c.aluguel_mae ?? '', qtd_quartos_ref: c.qtd_quartos_ref ?? '' })
   }
 
   async function salvar(e) {
@@ -67,7 +132,6 @@ export default function Casas() {
       ativo: editando.ativo
     }
     if (!payload.nome) { setErro('Informe o nome da casa.'); return }
-
     const q = editando.id
       ? supabase.from('casas').update(payload).eq('id', editando.id)
       : supabase.from('casas').insert(payload)
@@ -78,7 +142,7 @@ export default function Casas() {
   }
 
   async function excluir(c) {
-    const n = contagem[c.id] || 0
+    const n = (painel.get(c.id) || []).length
     const aviso = n > 0
       ? `Excluir "${c.nome}"? Isso apaga também os ${n} quarto(s) e os dados ligados a eles.`
       : `Excluir "${c.nome}"?`
@@ -89,14 +153,24 @@ export default function Casas() {
   }
 
   return (
-    <div style={{ maxWidth: 820, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ flex: 1 }}>
-          <h1>Casas</h1>
-          <p className="sub" style={{ margin: 0 }}>Imóveis sublocados e o critério de rateio das despesas.</p>
+    <div style={{ maxWidth: 980, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <h1>Casas &amp; Quartos</h1>
+          <p className="sub" style={{ margin: 0 }}>Cada casa com todos os seus quartos, ocupação e quem está atrasado no mês.</p>
         </div>
         <button className="secundario" onClick={() => navigate('/importar')}>⬆ Importar planilha</button>
         <button className="ouro" onClick={abrirNova}>+ Nova casa</button>
+      </div>
+
+      {/* Legenda */}
+      <div className="mt" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: '.78rem' }}>
+        {['pago', 'ocupado', 'atrasado', 'vago', 'manutencao'].map(k => (
+          <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ width: 12, height: 12, borderRadius: 3, background: ESTADO[k].cor, display: 'inline-block' }} />
+            {ESTADO[k].label}
+          </span>
+        ))}
       </div>
 
       {erro && <div className="erro">{erro}</div>}
@@ -106,33 +180,78 @@ export default function Casas() {
       ) : casas.length === 0 ? (
         <div className="card mt">
           <strong>Nenhuma casa ainda</strong>
-          <p className="sub">Cadastre a primeira casa para começar a organizar os quartos.</p>
+          <p className="sub">Cadastre a primeira casa (ou importe uma planilha) para começar.</p>
           <button className="ouro" onClick={abrirNova}>+ Nova casa</button>
         </div>
       ) : (
-        <div className="mt" style={{ display: 'grid', gap: 12 }}>
-          {casas.map(c => (
-            <div key={c.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 180 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <strong>{c.nome}</strong>
-                  {!c.ativo && <span className="tag" style={{ background: 'var(--surface-2)' }}>inativa</span>}
+        <div className="mt" style={{ display: 'grid', gap: 16 }}>
+          {casas.map(c => {
+            const lista = painel.get(c.id) || []
+            const r = resumoCasa(lista)
+            return (
+              <div key={c.id} className="card">
+                {/* Cabeçalho da casa */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 180 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <strong style={{ fontSize: '1.05rem' }}>{c.nome}</strong>
+                      {!c.ativo && <span className="tag" style={{ background: 'var(--surface-2)' }}>inativa</span>}
+                      {r.atrasados > 0 && (
+                        <span className="tag" style={{ background: '#ef444422', color: '#ef4444', border: '1px solid #ef444455' }}>
+                          {r.atrasados} atrasado(s)
+                        </span>
+                      )}
+                    </div>
+                    <div className="sub" style={{ margin: '3px 0 0' }}>
+                      {r.ocupados}/{r.total} ocupados · {r.vagos} vago(s) · {formatarMoeda(r.receita)}/mês
+                      {c.endereco ? ` · ${c.endereco}` : ''}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <button className="secundario" onClick={() => navigate(`/casas/${c.id}/quartos`)}>Quartos</button>
+                    <button className="secundario" onClick={() => navigate(`/casas/${c.id}/composicao`)}>Composição</button>
+                    <button className="secundario" onClick={() => abrirEdicao(c)}>Editar</button>
+                    <button className="secundario" onClick={() => excluir(c)} title="Excluir">🗑</button>
+                  </div>
                 </div>
-                <div className="sub" style={{ margin: '4px 0 0' }}>
-                  {c.endereco || 'sem endereço'} · {contagem[c.id] || 0} quarto(s) · rateio {CRITERIOS[c.criterio_rateio]?.toLowerCase()}
-                </div>
-                {Number(c.aluguel_mae) > 0 && (
-                  <div className="sub" style={{ margin: '2px 0 0' }}>aluguel-mãe {formatarMoeda(c.aluguel_mae)}</div>
+
+                {/* Grade de quartos */}
+                {lista.length === 0 ? (
+                  <p className="sub" style={{ marginTop: 10 }}>
+                    Sem quartos. <button className="secundario" style={{ padding: '4px 10px' }} onClick={() => navigate(`/casas/${c.id}/quartos`)}>+ cadastrar</button>
+                  </p>
+                ) : (
+                  <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+                    {lista.map(q => {
+                      const e = ESTADO[q.estado] || ESTADO.vago
+                      return (
+                        <button key={q.id} onClick={() => navigate(`/casas/${c.id}/quartos`)}
+                          title={`${q.identificacao} · ${e.label}${q.inquilino ? ' · ' + q.inquilino : ''}`}
+                          style={{
+                            textAlign: 'left', padding: '8px 10px', borderRadius: 8, cursor: 'pointer',
+                            background: e.cor + '18', border: `1px solid ${e.cor}66`, borderLeft: `4px solid ${e.cor}`,
+                            color: 'inherit', display: 'flex', flexDirection: 'column', gap: 2, minHeight: 56
+                          }}>
+                          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                            <strong style={{ fontSize: '.85rem' }}>{q.identificacao}</strong>
+                            <span style={{ width: 9, height: 9, borderRadius: '50%', background: e.cor, flexShrink: 0 }} />
+                          </span>
+                          <span className="sub" style={{ fontSize: '.72rem', color: e.cor, fontWeight: 600 }}>
+                            {q.estado === 'atrasado' ? `Atrasado ${q.atraso}d` : e.label}
+                          </span>
+                          {q.inquilino && (
+                            <span className="sub" style={{ fontSize: '.72rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {q.inquilino}
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="ouro" onClick={() => navigate(`/casas/${c.id}/quartos`)}>Quartos</button>
-                <button className="secundario" onClick={() => navigate(`/casas/${c.id}/composicao`)}>Composição</button>
-                <button className="secundario" onClick={() => abrirEdicao(c)}>Editar</button>
-                <button className="secundario" onClick={() => excluir(c)} title="Excluir">🗑</button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -142,7 +261,7 @@ export default function Casas() {
             <label>Nome *</label>
             <input value={editando.nome} autoFocus
                    onChange={e => setEditando({ ...editando, nome: e.target.value })}
-                   placeholder="Ex.: Casa Amarela / Rua X, 123" />
+                   placeholder="Ex.: Casa 01 / Rua X, 123" />
 
             <label>Endereço</label>
             <input value={editando.endereco || ''}

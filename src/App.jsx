@@ -17,7 +17,7 @@ import Acertos from './pages/Acertos'
 import Manutencao from './pages/Manutencao'
 import Composicao from './pages/Composicao'
 import Relatorios from './pages/Relatorios'
-import Cobranca from './pages/Cobranca'
+import Backup from './pages/Backup'
 import ContasPagar from './pages/ContasPagar'
 import FluxoCaixa from './pages/FluxoCaixa'
 import Alertas from './pages/Alertas'
@@ -86,7 +86,9 @@ export default function App() {
         <Route path="/acertos" element={<Acertos />} />
         <Route path="/manutencao" element={<Manutencao />} />
         <Route path="/relatorios" element={<Relatorios />} />
-        <Route path="/cobranca" element={<Cobranca />} />
+        <Route path="/backup" element={<Backup />} />
+        {/* Cobrança foi unificada em Receber & Cobrança */}
+        <Route path="/cobranca" element={<Navigate to="/recebimentos" replace />} />
         <Route path="/contas-pagar" element={<ContasPagar />} />
         <Route path="/fluxo-caixa" element={<FluxoCaixa />} />
         <Route path="/alertas" element={<Alertas />} />

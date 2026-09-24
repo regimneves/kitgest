@@ -84,6 +84,20 @@ export function valorPorExtenso(valor) {
   return `${parteReais} e ${parteCent}`
 }
 
+// Comparador natural (alfanumérico) pt-BR: "Quarto 2" vem antes de "Quarto 10".
+export function compararNatural(a, b) {
+  return String(a ?? '').localeCompare(String(b ?? ''), 'pt-BR', { numeric: true, sensitivity: 'base' })
+}
+
+// Ordena uma lista de quartos por casa e depois pela identificação (natural).
+// Aceita item com { casas:{nome} } (join) ou { casa_nome } achatado.
+export function ordenarQuartos(lista, casaNome = q => q?.casas?.nome) {
+  return [...(lista || [])].sort((a, b) => {
+    const c = compararNatural(casaNome(a), casaNome(b))
+    return c !== 0 ? c : compararNatural(a?.identificacao, b?.identificacao)
+  })
+}
+
 // Converte o que o usuário digita ("1.410,50" ou "1410.5") em número.
 export function parseMoeda(s) {
   if (s === null || s === undefined || s === '') return 0
