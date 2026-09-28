@@ -2,29 +2,36 @@ name: Keep Supabase awake
 
 # Projetos Supabase free pausam após ~7 dias sem atividade.
 #
+# ⚠️ PROJETO CERTO (produção): geltxfbwrqmacshwaveh (conta softia.suporte).
+#    NÃO confundir com o projeto MORTO vuucuiescfrhygxrhbyx (conta regimneves,
+#    abandonado na migração de 31/08). O app publicado em softia.app.br/kitgest
+#    fala com geltxfbwrqmacshwaveh — é ESTE que precisa ficar acordado.
+#
 # LIÇÃO APRENDIDA (set/2026): o ping antigo batia em /rest/v1/orgs e recebia
 # 401 (RLS bloqueia a chave anônima). Requisição RECUSADA não conta como
-# atividade — o projeto pausou ~3 dias após um ping "com sucesso" (401).
-# Além disso, projeto PAUSADO some do DNS: o curl falha ao resolver o host
-# (exit 6), não devolve HTTP 000 como o script antigo supunha, e como o
-# GitHub roda `bash -eo pipefail` o script morria antes de alertar.
+# atividade. Além disso, projeto PAUSADO some do DNS: o curl falha ao resolver
+# o host (exit 6), não devolve HTTP 000.
 #
 # AGORA: chamamos a RPC public.keepalive() (migração 0010), que executa uma
-# consulta REAL e devolve 200 = atividade de verdade. Rodamos a cada 2 dias
-# (folga confortável < 7) e tratamos falha de DNS/HTTP corretamente.
+# consulta REAL e devolve 200 = atividade de verdade. Rodamos TODO DIA (folga
+# grande < 7) e, se falhar, abrimos um issue no GitHub → você recebe e-mail.
 
 on:
   schedule:
-    - cron: "17 6 */2 * *"   # a cada 2 dias, 06:17 UTC (minuto "quebrado" reduz atraso/skip do GitHub)
-  workflow_dispatch:          # botão de rodar manualmente no Actions
+    - cron: "17 6 * * *"        # todo dia, 06:17 UTC (minuto "quebrado" reduz atraso/skip do GitHub)
+  workflow_dispatch:            # botão de rodar manualmente no Actions
+
+permissions:
+  issues: write                 # necessário p/ abrir o issue de alerta em caso de falha
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase (KitGest) via RPC keepalive
+      - name: Ping Supabase (KitGest PRODUÇÃO) via RPC keepalive
+        id: ping
         run: |
-          URL="https://geltxfbwrqmacshwaveh.supabase.co"
+          URL="https://geltxfbwrqmacshwaveh.supabase.co"   # produção — não trocar por vuucui!
           KEY="sb_publishable_MnG02iBufzW0rQ9taraJ1A_jdIvP_US"
           set +e
           code=$(curl -s -o /tmp/body.txt --max-time 30 -w "%{http_code}" \
@@ -36,7 +43,42 @@ jobs:
           echo "curl_exit=$curl_exit · HTTP=$code · corpo=$(cat /tmp/body.txt 2>/dev/null)"
           # curl_exit 6 = não resolveu o host = projeto PAUSADO. Qualquer HTTP != 200 = problema.
           if [ "$curl_exit" != "0" ] || [ "$code" != "200" ]; then
-            echo "::error::KitGest Supabase NAO respondeu 200 (curl=$curl_exit HTTP=$code). Projeto provavelmente PAUSADO — reative em https://supabase.com/dashboard/project/geltxfbwrqmacshwaveh"
+            echo "::error::KitGest Supabase (geltxfbwrqmacshwaveh) NAO respondeu 200 (curl=$curl_exit HTTP=$code). Projeto provavelmente PAUSADO — reative em https://supabase.com/dashboard/project/geltxfbwrqmacshwaveh"
             exit 1
           fi
-          echo "✅ Banco acordado com atividade REAL (HTTP 200)."
+          echo "✅ Banco de produção acordado com atividade REAL (HTTP 200)."
+
+      - name: Abrir issue de alerta se o ping falhar
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const titulo = "⚠️ KitGest: keepalive do Supabase FALHOU";
+            const corpo = [
+              "O ping diário do KitGest falhou — o banco de **produção** pode estar",
+              "pausado ou fora do ar, e o cliente pode ver **\"Failed to fetch\"** no login.",
+              "",
+              "**Projeto (produção):** `geltxfbwrqmacshwaveh` (conta softia.suporte)",
+              "**Reative aqui:** https://supabase.com/dashboard/project/geltxfbwrqmacshwaveh",
+              "",
+              `Run que falhou: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              "",
+              "_Aviso automático do workflow keepalive.yml._"
+            ].join("\n");
+            // Não duplicar: se já houver um issue aberto com esse título, só comenta.
+            const abertos = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "keepalive"
+            });
+            if (abertos.data.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: abertos.data[0].number,
+                body: `Falhou de novo em ${new Date().toISOString()}.`
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title: titulo, body: corpo, labels: ["keepalive"]
+              });
+            }
